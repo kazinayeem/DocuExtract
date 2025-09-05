@@ -1,103 +1,156 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import {
+  exportCashMemo,
+  extractJSON,
+} from "@/utils/export_exel";
+import { useState } from "react";
+import Image from 'next/image'; // Import next/image for better performance
+
+export default function HomePage() {
+  const [file, setFile] = useState<File | null>(null);
+  const [answer, setAnswer] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!file) return;
+
+    setLoading(true);
+    setAnswer("");
+
+    try {
+      const form = new FormData();
+      form.append("image", file);
+
+      const res = await fetch("/api/gemini", {
+        method: "POST",
+        body: form,
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Request failed");
+
+      setAnswer(data.text);
+    } catch (err: any) {
+      setAnswer(`❌ Error: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      setFile(selectedFile);
+    }
+  };
+
+  const handleExportClick = async () => {
+    const format = (
+      document.getElementById("exportFormat") as HTMLSelectElement
+    ).value;
+    const parsed = extractJSON(answer);
+    if (!parsed) {
+      alert("Invalid JSON returned from Gemini");
+      return;
+    }
+    await exportCashMemo(parsed, format);
+  };
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <main className="min-h-screen bg-gray-100 flex items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-lg md:max-w-3xl">
+        <div className="bg-white rounded-3xl shadow-2xl p-6 sm:p-10 border border-gray-200">
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-extrabold text-gray-900 leading-tight">
+              DocuExtract
+            </h1>
+            <p className="mt-2 text-lg text-gray-600 max-w-md mx-auto">
+              Effortlessly extract cash memo data and export to various formats.
+            </p>
+          </div>
+
+          {/* Upload Form */}
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="flex flex-col items-center">
+              <label 
+                className={`relative w-full border-2 border-dashed rounded-xl p-8 transition-colors ${
+                  file ? "border-green-500 bg-green-50" : "border-gray-300 bg-gray-50 hover:border-blue-500 hover:bg-blue-50"
+                } cursor-pointer`}
+              >
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+                <div className="flex flex-col items-center justify-center text-center">
+                  <span className="text-gray-500 font-medium">
+                    {file ? `Selected: ${file.name}` : "Click to upload an image"}
+                  </span>
+                  {!file && (
+                    <span className="mt-1 text-sm text-gray-400">
+                      (PNG, JPG, JPEG, etc.)
+                    </span>
+                  )}
+                </div>
+              </label>
+            </div>
+
+            <button
+              type="submit"
+              disabled={!file || loading}
+              className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 text-white font-semibold text-lg shadow-lg hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 transition-all"
+            >
+              {loading ? "Analyzing Document..." : "Upload & Analyze"}
+            </button>
+          </form>
+
+          {/* Export Section */}
+          {answer && (
+            <div className="mt-10 rounded-2xl border border-gray-200 bg-gray-50 p-6 shadow-inner transition-opacity duration-500 ease-in-out opacity-100">
+              <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                <span className="bg-blue-200 text-blue-800 rounded-full w-8 h-8 flex items-center justify-center mr-3">✨</span>
+                Export Cash Memo
+              </h2>
+
+              {answer.startsWith("❌ Error:") ? (
+                <p className="text-red-600 font-semibold">{answer}</p>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Document analysis complete. Select a format to download the structured data.
+                  </p>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                    <select
+                      id="exportFormat"
+                      className="flex-grow w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      defaultValue="pdf"
+                    >
+                      <option value="pdf">PDF (Print)</option>
+                      <option value="xlsx">Excel (Data Analysis)</option>
+                      <option value="csv">CSV (Plain Text)</option>
+                      <option value="json">JSON (Developer)</option>
+                      <option value="docx">Word (Document)</option>
+                      <option value="xml">XML (Markup)</option>
+                      <option value="gsheet">Google Sheets</option>
+                    </select>
+
+                    <button
+                      onClick={handleExportClick}
+                      className="w-full sm:w-auto rounded-lg bg-blue-600 px-6 py-3 text-white font-semibold shadow hover:bg-blue-700 transition"
+                    >
+                      Download
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+      </div>
+    </main>
   );
 }
